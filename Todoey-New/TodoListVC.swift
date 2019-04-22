@@ -11,13 +11,17 @@ import UIKit
 class TodoListVC: UITableViewController {
 
   var itemArray = ["Find Mike", "Buy Eggs", "Destory Earth"]
-    
+   
+    let defaults = UserDefaults.standard
     
     override func viewDidLoad() {
         super.viewDidLoad()
         // Do any additional setup after loading the view.
         
-  
+        if let items = defaults.array(forKey: "TodoListArray") as? [String] {
+           
+            itemArray = items
+        }
 
         
     }
@@ -75,6 +79,8 @@ class TodoListVC: UITableViewController {
 //            print(textField.text)
             
             self.itemArray.append(textField.text!)
+            
+            self.defaults.set(self.itemArray, forKey: "TodoListArray")
             
   // if you don't reload the table view, it won't show in the interface.
             self.tableView.reloadData()

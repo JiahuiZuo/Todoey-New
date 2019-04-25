@@ -7,25 +7,36 @@
 //
 
 import UIKit
+import CoreData
 
 class TodoListVC: UITableViewController {
 
+    
 //    var itemArray = ["Find Mike", "Buy Eggs", "Destroy Earth"]
     
   var itemArray = [Item]()
    
 //    let defaults = UserDefaults.standard
    
-    let dataFilePath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("Items.plist")
+//    let dataFilePath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("Items.plist")
     
-   
+    var selectedCategory : Category? {
+        
+        didSet{
+            
+            loadItems()
+        }
+    }
+    
+    
+    
+    let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
     
     
     
     override func viewDidLoad() {
         super.viewDidLoad()
         // Do any additional setup after loading the view.
-        
      
         
 //        let newItem = Item()
@@ -40,8 +51,16 @@ class TodoListVC: UITableViewController {
 //        newItem3.title = "Destory Earth"
 //        itemArray.append(newItem3)
         
-         print(dataFilePath)
-         loadItems()
+       
+        
+        print(FileManager.default.urls(for: .documentDirectory, in: .userDomainMask))
+   
+        
+        
+//         print(dataFilePath)
+        
+//           loadItems()
+        
     
 //        if let items = defaults.array(forKey: "TodoListArray") as? [Item] {
 //
@@ -52,7 +71,8 @@ class TodoListVC: UITableViewController {
     }
     
 
-    // TableView Datatsource Method
+    //MARK: TableView Datatsource Method
+    
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         
         return itemArray.count
@@ -104,16 +124,33 @@ class TodoListVC: UITableViewController {
         
     }
     
-    // TableView Delegate Method
+    //MARK: TableView Delegate Method
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         
        
 //      tableView.cellForRow(at: indexPath)?.accessoryType = .checkmark
         
 //        print(itemArray[indexPath.row])
+ 
         
-  
+        
+        
+ /*
+         itemArray.remove(at: indexPath.row) : remove this item from the array including its indexpath after the row is clicked
+         context.delete(itemArray[indexPath.row]): remove this item from database using its indexPath.
+         
+         the order is very important. if you remove from the item array first and then removing from the context will crush because the indexPath got screwed up.
+*/
+ 
+        // those two line of code: when the row is clicked, it got removed instead of removing the checkmark.
+//     context.delete(itemArray[indexPath.row])
+//     itemArray.remove(at: indexPath.row)
+//
+ 
+        
         itemArray[indexPath.row].done = !itemArray[indexPath.row].done
+        
+        
        
 //        if  itemArray[indexPath.row].done == false {
 //
@@ -158,11 +195,20 @@ class TodoListVC: UITableViewController {
             
 //            self.itemArray.append(textField.text!)
             
-            let newItem = Item()
+//            let newItem = Item()
+//            newItem.title = textField.text!
+//            self.itemArray.append(newItem)
+//            self.saveItems()
+           
+//          let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
+            let newItem = Item(context: self.context)
             newItem.title = textField.text!
+            newItem.done = false
+            
+            newItem.parentCategory = self.selectedCategory
+            
             self.itemArray.append(newItem)
             self.saveItems()
-           
             
 //            self.defaults.set(self.itemArray, forKey: "TodoListArray")
             
@@ -205,40 +251,135 @@ class TodoListVC: UITableViewController {
     func saveItems() {
         
         
-        let encoder = PropertyListEncoder()
+//        let encoder = PropertyListEncoder()
         
         do {
             
-            let data = try encoder.encode(itemArray)
+//            let data = try encoder.encode(itemArray)
+//            try data.write(to: dataFilePath!)
             
-            try data.write(to: dataFilePath!)
+           
+           try context.save()
+            
             
         } catch {
             
-            print("Error encoding item array, \(error)")
+//            print("Error encoding item array, \(error)")
             
+            print("Error saving context \(error)")
         }
         
         // if you don't reload the table view, it won't show in the interface.
         self.tableView.reloadData()
+        
     }
     
     
-    func loadItems() {
+    func loadItems(with request: NSFetchRequest<Item> = Item.fetchRequest(), predicate: NSPredicate? = nil) {
+
+        // = Item.fetchRequest() : add a default value for the parameter, so if you call loadItems() without anything in the parameter, it works.
         
-        if let data = try? Data(contentsOf: dataFilePath!) {
+        
+        
+//        if let data = try? Data(contentsOf: dataFilePath!) {
+//
+//            let decoder = PropertyListDecoder()
+//
+//            do {
+//
+//                itemArray = try decoder.decode([Item].self, from: data)
+//
+//            } catch {
+//
+//                print("Error decoding item array, \(error)")
+//            }
+//        }
+        
+ //       let request : NSFetchRequest<Item> = Item.fetchRequest()
+       
+        let categoryPredicate = NSPredicate(format: "parentCategory.name MATCHES %@", selectedCategory!.name!)
+        
+        if let additionalPredicate = predicate {
+
+            request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [categoryPredicate, additionalPredicate])
+
+        } else {
+
+            request.predicate = categoryPredicate
+        }
+        
+        
+        do {
+        
+//            try context.fetch(request)
             
-            let decoder = PropertyListDecoder()
+            itemArray = try context.fetch(request)
+        
+        } catch {
+        
+        print("Error fetching data from context, \(error)")
             
-            do {
-           
-                itemArray = try decoder.decode([Item].self, from: data)
+        }
+        
+        tableView.reloadData()
+    }
+    
+}
+
+
+//MARK: - Search Bar methods
+
+extension TodoListVC: UISearchBarDelegate {
+    
+    
+    
+    func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
+        
+        
+         let request : NSFetchRequest<Item> = Item.fetchRequest()
+        
+//                print(searchBar.text!)
+        
+        let predicate = NSPredicate(format: "title CONTAINS[cd] %@", searchBar.text!)
+//                request.predicate = predicate
+        
+//        request.predicate = NSPredicate(format: "title CONTAINS[cd] %@", searchBar.text!)
+        
+        
+//                let sortDescriptor = NSSortDescriptor(key: "title", ascending: true)
+//                request.sortDescriptors = [sortDescriptor]
+        
+         request.sortDescriptors = [NSSortDescriptor(key: "title", ascending: true)]
+    
+        
+//                do {
+//                    itemArray = try context.fetch(request)
+//                } catch {
+//                    print("Error fetching data from context \(error)")
+//                }
+        
+        loadItems(with: request, predicate: predicate)
+        
+//        tableView.reloadData()
+        
+    }
+    
+    func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
+        
+        if searchBar.text?.count == 0 {
+            
+            loadItems()
+            
+            
+            DispatchQueue.main.async {
                 
-            } catch {
-                
-                print("Error decoding item array, \(error)")
+                searchBar.resignFirstResponder()
+                // the keyboard and the cursor in the search bar is dismissed.
             }
+           
         }
     }
+    
 }
+
 
